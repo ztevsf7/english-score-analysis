@@ -26,7 +26,7 @@ if not check_password():
     st.info("请在左侧侧边栏输入密码以开始分析。")
     st.stop()
 
-st.title("🎯 英语全题型多维成绩分析系统")
+st.title("🎯  🤏🕖 英语全题型多维成绩分析系统")
 
 # --- 数据处理逻辑 ---
 @st.cache_data # 增加缓存，提高大数据量时的运行速度
@@ -104,4 +104,5 @@ if df_all is not None:
         st.dataframe(class_avg)
 
 else:
+
     st.info("👋 请上传 Excel/CSV 文件开始分析")
