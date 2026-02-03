@@ -36,37 +36,72 @@ def process_data(files):
     if not files: return None, []
 
     for file in files:
-        # 使用文件名作为考试名称，不再做复杂的字符串截取
         exam_name = os.path.splitext(file.name)[0]
         try:
-            df = pd.read_csv(file) if file.name.endswith('.csv') else pd.read_excel(file)
+            # 1. 智能读取：先不指定表头，全部读进来
+            if file.name.endswith('.csv'):
+                df_raw = pd.read_csv(file, header=None)
+            else:
+                df_raw = pd.read_excel(file, header=None)
+            
+            # 2. 寻找表头行：扫描前10行，寻找包含"姓名"的行
+            header_row_idx = -1
+            for i in range(min(10, len(df_raw))):
+                # 将这一行转为字符串，检查是否包含关键字
+                row_values = [str(x) for x in df_raw.iloc[i].values]
+                if "姓名" in row_values or "Name" in row_values:
+                    header_row_idx = i
+                    break
+            
+            if header_row_idx == -1:
+                st.warning(f"⚠️ 文件 {file.name} 中未找到'姓名'列，跳过。")
+                continue
+
+            # 3. 重置表头：将找到的那一行设为列名
+            df = df_raw.iloc[header_row_idx + 1:].copy()
+            df.columns = df_raw.iloc[header_row_idx].values
+            
+            # 4. 常规清洗
             df.columns = [str(c).replace('\n', '').strip() for c in df.columns]
             
+            # 定位关键列
             name_col = next((c for c in df.columns if '姓名' in c), None)
-            total_score_col = next((c for c in df.columns if '最新得分' in c or '总分' in c or '科目成绩' in c), None)
             
-            # 你的核心指标
-            keywords = ['客观', '主观', '排名', '写作', '填空']
-            current_subjects = [c for c in df.columns if any(k in c for k in keywords)]
+            # 扩充总分关键词：增加了 '科目成绩', '成绩'
+            total_score_col = next((c for c in df.columns if any(k in c for k in ['最新得分', '总分', '科目成绩', 'Score'])), None)
             
+            # 扩充题型关键词：增加了 '单词', '写作'
+            keywords = ['听力', '阅读', '五', '完形', '语法', '文', '续写', '填空', '单词', '写作']
+            current_subjects = [c for c in df.columns if any(k in c for k in keywords) and '排名' not in c and '总' not in c]
+            
+            # 如果没找到总分列，尝试用“客观题+主观题”计算（针对你的新表结构）
+            if not total_score_col and '客观题成绩' in df.columns and '主观题成绩' in df.columns:
+                df['计算总分'] = pd.to_numeric(df['客观题成绩'], errors='coerce') + pd.to_numeric(df['主观题成绩'], errors='coerce')
+                total_score_col = '计算总分'
+
             if name_col and total_score_col:
-                sub_df = df[[name_col, total_score_col] + current_subjects].copy()
+                # 提取数据
+                cols_to_keep = [name_col, total_score_col] + current_subjects
+                sub_df = df[cols_to_keep].copy()
+                
+                # 重命名以便统一合并
                 sub_df.rename(columns={name_col: '姓名', total_score_col: '总分'}, inplace=True)
-                
-                # 统一写作名称
-                if '写作' in sub_df.columns:
-                    sub_df.rename(columns={'写作': '写作1'}, inplace=True)
-                    current_subjects = [c if c != '写作' else '写作1' for c in current_subjects]
-                
                 sub_df['考试名称'] = exam_name
+                
+                # 确保是有效数据行（排除下面的空行）
+                sub_df.dropna(subset=['姓名'], inplace=True)
+                
                 all_records.append(sub_df)
                 for s in current_subjects: found_subjects.add(s)
-                
+            else:
+                st.warning(f"⚠️ 文件 {file.name} 缺少关键列（姓名或总分），已跳过。")
+
         except Exception as e:
             st.error(f"解析 {file.name} 失败: {e}")
             
     if all_records:
         full_df = pd.concat(all_records, ignore_index=True)
+        # 确保数值化
         for col in list(found_subjects) + ['总分']:
             full_df[col] = pd.to_numeric(full_df[col], errors='coerce')
         return full_df, list(found_subjects)
@@ -142,4 +177,5 @@ if df_all is not None:
 
 else:
     st.info("👋 请在左侧上传 Excel/CSV 文件。文件名可以叫'期中考试'、'第一次月考'等任意名称。")
+
 
