@@ -26,7 +26,7 @@ if not check_password():
     st.info("请在左侧侧边栏输入密码以开始分析。")
     st.stop()
 
-st.title("🎯 英语全题型多维成绩分析系统")
+st.title("🎯🤏⌚ 英语全题型多维成绩分析系统")
 
 # --- 数据处理逻辑 ---
 @st.cache_data 
@@ -142,3 +142,4 @@ if df_all is not None:
 
 else:
     st.info("👋 请在左侧上传 Excel/CSV 文件。文件名可以叫'期中考试'、'第一次月考'等任意名称。")
+
